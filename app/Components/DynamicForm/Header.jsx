@@ -13,7 +13,7 @@ export default function Header({ theme, setTheme, mounted }) {
         title="Toggle theme"
         aria-label="Toggle theme"
       >
-        {mounted ? (theme === 'dark' ? '☀' : '☾') : '◐'}
+        {mounted ? (theme === 'dark' ? ' ☾' : '☀') : '◐'}
       </button>
     </header>
   );
