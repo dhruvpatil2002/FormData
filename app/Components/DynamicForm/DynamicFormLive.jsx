@@ -25,8 +25,8 @@ export default function DynamicFormLive() {
     const raf = requestAnimationFrame(() => {
       setMounted(true);
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
+        ? 'light'
+        : 'dark';
       setTheme(systemTheme);
     });
 
