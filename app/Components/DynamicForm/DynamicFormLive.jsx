@@ -1,12 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from './Header';
 import StatsCards from './StatsCards';
 import FormSection from './FormSection';
 import PreviewSection from './PreviewSection';
 
-const createField = (id, label = '', type = 'text', value = '', isRemoving = false) => ({
+const createId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const createField = (
+  id,
+  label = '',
+  type = 'text',
+  value = '',
+  isRemoving = false
+) => ({
   id,
   label,
   type,
@@ -17,87 +28,109 @@ const createField = (id, label = '', type = 'text', value = '', isRemoving = fal
 export default function DynamicFormLive() {
   const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState('light');
-  const [fields, setFields] = useState([createField(1, 'Full name')]);
+  const [fields, setFields] = useState([createField(createId(), '')]);
   const [entries, setEntries] = useState([]);
+  const removeTimers = useRef(new Map());
 
   useEffect(() => {
-    
-    const raf = requestAnimationFrame(() => {
-      setMounted(true);
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'light'
-        : 'dark';
-      setTheme(systemTheme);
-    });
+    setMounted(true);
 
-    return () => cancelAnimationFrame(raf);
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const initialTheme = media.matches ? 'dark' : 'light';
+    setTheme(initialTheme);
+
+    return () => {
+      removeTimers.current.forEach((timer) => clearTimeout(timer));
+      removeTimers.current.clear();
+    };
   }, []);
 
   useEffect(() => {
     if (!mounted) return;
     document.documentElement.setAttribute('data-theme', theme);
-  }, [theme, mounted]);
+  }, [mounted, theme]);
 
-  const addField = () => {
-    setFields((prev) => [
-      ...prev,
-      createField(Date.now() + Math.random(), '', 'text', '', false),
-    ]);
-  };
+  const addField = useCallback(() => {
+    setFields((prev) => [...prev, createField(createId())]);
+  }, []);
 
-  const removeField = (id) => {
-    if (fields.length === 1) return;
+  const removeField = useCallback((id) => {
+    setFields((prev) => {
+      if (prev.length === 1) return prev;
 
-    setFields((prev) =>
-      prev.map((field) =>
+      return prev.map((field) =>
         field.id === id ? { ...field, isRemoving: true } : field
-      )
-    );
+      );
+    });
 
-    setTimeout(() => {
-      setFields((prev) => prev.filter((field) => field.id !== id));
+    const timer = setTimeout(() => {
+      setFields((prev) => {
+        if (prev.length === 1) return prev.filter((field) => field.id !== id) || prev;
+        return prev.filter((field) => field.id !== id);
+      });
+      removeTimers.current.delete(id);
     }, 250);
-  };
 
-  const updateField = (id, key, value) => {
+    removeTimers.current.set(id, timer);
+  }, []);
+
+  const updateField = useCallback((id, key, value) => {
     setFields((prev) =>
       prev.map((field) =>
         field.id === id
-          ? { ...field, [key]: value, ...(key === 'type' ? { value: '' } : {}) }
+          ? {
+              ...field,
+              [key]: value,
+              ...(key === 'type' ? { value: '' } : {}),
+            }
           : field
       )
     );
-  };
+  }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
 
-    const validFields = fields.filter(
-      (field) => field.label.trim() || field.value.trim()
-    );
+    const validFields = fields
+      .map((field) => ({
+        label: field.label.trim(),
+        type: field.type,
+        value: String(field.value).trim(),
+      }))
+      .filter((field) => field.label || field.value);
 
     if (!validFields.length) return;
 
     const submission = {
-      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      id: createId(),
       timestamp: new Date().toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
       }),
       fields: validFields.map((field) => ({
-        label: field.label.trim() || 'Untitled field',
+        label: field.label || 'Untitled field',
         type: field.type,
-        value: field.value.trim() || 'No value provided',
+        value: field.value || 'No value provided',
       })),
     };
 
     setEntries((prev) => [submission, ...prev]);
-  };
 
-  const clearEntries = () => setEntries([]);
+    setFields((prev) =>
+      prev.map((field, index) =>
+        index === 0
+          ? { ...field, value: '' }
+          : { ...field, label: '', type: 'text', value: '', isRemoving: false }
+      )
+    );
+  }, [fields]);
+
+  const clearEntries = useCallback(() => {
+    setEntries([]);
+  }, []);
 
   const filledCount = useMemo(
-    () => fields.filter((field) => field.value.trim()).length,
+    () => fields.filter((field) => String(field.value).trim()).length,
     [fields]
   );
 
@@ -114,7 +147,10 @@ export default function DynamicFormLive() {
         <div className="panel hero-copy">
           <span className="eyebrow">Responsive form builder</span>
           <h1>Dynamic input fields with live screen updates.</h1>
-          <p>Add fields, remove fields, submit data, and see everything render instantly.</p>
+          <p>
+            Add fields, remove fields, submit data, and see everything render
+            instantly.
+          </p>
         </div>
 
         <StatsCards

@@ -11,45 +11,59 @@ import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-export default function ChartSection({ entries, theme }) {
-  const chartData = useMemo(() => {
-    const css =
-      typeof window !== 'undefined'
-        ? getComputedStyle(document.documentElement)
-        : null;
-
-    const primary = css?.getPropertyValue('--color-primary').trim() || '#01696f';
-    const fill =
-      css?.getPropertyValue('--color-primary-highlight').trim() || '#d9ebea';
-
+function getThemeColors() {
+  if (typeof window === 'undefined') {
     return {
-      labels: entries.map((_, index) => `#${index + 1}`),
+      primary: '#01696f',
+      fill: '#d9ebea',
+      divider: '#dcd9d5',
+      muted: '#6f6b62',
+    };
+  }
+
+  const css = getComputedStyle(document.documentElement);
+
+  return {
+    primary: css.getPropertyValue('--color-primary').trim() || '#01696f',
+    fill:
+      css.getPropertyValue('--color-primary-highlight').trim() || '#d9ebea',
+    divider: css.getPropertyValue('--color-divider').trim() || '#dcd9d5',
+    muted: css.getPropertyValue('--color-text-muted').trim() || '#6f6b62',
+  };
+}
+
+export default function ChartSection({ entries = [], theme }) {
+  const colors = useMemo(() => getThemeColors(), [theme]);
+
+  const chartValues = useMemo(() => {
+    return entries.map((entry) =>
+      entry.fields.reduce(
+        (sum, field) => sum + String(field?.value ?? '').length,
+        0
+      )
+    );
+  }, [entries]);
+
+  const chartData = useMemo(() => {
+    return {
+      labels: entries.map((entry, index) => entry.timestamp || `#${index + 1}`),
       datasets: [
         {
           label: 'Character count',
-          data: entries.map((entry) =>
-            entry.fields.reduce((sum, field) => sum + String(field.value).length, 0)
-          ),
-          backgroundColor: fill,
-          borderColor: primary,
+          data: chartValues,
+          backgroundColor: colors.fill,
+          borderColor: colors.primary,
           borderWidth: 1.5,
           borderRadius: 10,
-          hoverBackgroundColor: primary,
+          borderSkipped: false,
+          hoverBackgroundColor: colors.primary,
+          maxBarThickness: 48,
         },
       ],
     };
-  }, [entries, theme]);
+  }, [entries, chartValues, colors]);
 
   const chartOptions = useMemo(() => {
-    const css =
-      typeof window !== 'undefined'
-        ? getComputedStyle(document.documentElement)
-        : null;
-
-    const primary = css?.getPropertyValue('--color-primary').trim() || '#01696f';
-    const divider = css?.getPropertyValue('--color-divider').trim() || '#dcd9d5';
-    const muted = css?.getPropertyValue('--color-text-muted').trim() || '#6f6b62';
-
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -58,39 +72,63 @@ export default function ChartSection({ entries, theme }) {
         intersect: false,
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: false,
+        },
         tooltip: {
           enabled: true,
-          backgroundColor: primary,
+          backgroundColor: colors.primary,
           titleColor: '#fff',
           bodyColor: '#fff',
           displayColors: false,
           callbacks: {
+            title: (context) => `Entry ${context[0].dataIndex + 1}`,
             label: (context) => `${context.raw} typed characters`,
           },
         },
       },
       scales: {
         x: {
-          grid: { display: false },
-          ticks: { color: muted },
+          grid: {
+            display: false,
+          },
+          ticks: {
+            color: colors.muted,
+            maxRotation: 0,
+          },
         },
         y: {
           beginAtZero: true,
-          grid: { color: divider },
-          ticks: { color: muted, precision: 0 },
+          grid: {
+            color: colors.divider,
+          },
+          ticks: {
+            color: colors.muted,
+            precision: 0,
+            stepSize: 1,
+          },
         },
       },
     };
-  }, [theme]);
+  }, [colors]);
+
+  const hasData = entries.length > 0;
 
   return (
     <div className="chart-card">
       <h3>Entry overview</h3>
-      <p>Hover or tap bars to inspect character counts.</p>
+      <p>
+        {hasData
+          ? 'Hover or tap bars to inspect character counts.'
+          : 'Submit entries to see character counts appear here.'}
+      </p>
 
       <div className="chart-box">
-        <Bar data={chartData} options={chartOptions} />
+        {hasData ? (
+          <Bar data={chartData} options={chartOptions} />
+        ) : (
+          <div className="chart-empty">No entry data available yet.</div>
+        )}
       </div>
     </div>
   );
